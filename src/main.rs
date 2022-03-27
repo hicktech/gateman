@@ -1,8 +1,9 @@
 use futures_util::{SinkExt, StreamExt, TryFutureExt};
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use warp::Filter;
 use warp::filters::ws::{Message, WebSocket};
+use warp::Filter;
 
 /// # Gateman Webservice
 /// Websocket based service that provides remote gate control.
@@ -17,17 +18,26 @@ use warp::filters::ws::{Message, WebSocket};
 ///
 #[tokio::main]
 async fn main() {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let gate = warp::any().map(move || tx.clone());
+
+    let mut rx = UnboundedReceiverStream::new(rx);
+    tokio::task::spawn(async move {
+        while let Some(message) = rx.next().await {
+            eprintln!("gate rx: {}", message);
+        }
+    });
+
     let routes = warp::path("gate")
         .and(warp::ws())
-        .map(|ws: warp::ws::Ws| {
-            ws.on_upgrade(|websocket| connection(websocket))
-        });
+        .and(gate)
+        .map(|ws: warp::ws::Ws, tx| ws.on_upgrade(|websocket| connection(websocket, tx)));
 
     eprintln!("websocket ready");
     warp::serve(routes).run(([127, 0, 0, 1], 9000)).await;
 }
 
-async fn connection(websocket: WebSocket) {
+async fn connection(websocket: WebSocket, gate: UnboundedSender<String>) {
     let (mut ws_tx, mut from_client) = websocket.split();
     let (to_client, rx) = mpsc::unbounded_channel();
 
@@ -45,21 +55,20 @@ async fn connection(websocket: WebSocket) {
         }
     });
 
-    to_client.send(Message::text("hello")).expect("failed to init");
+    to_client
+        .send(Message::text("hello"))
+        .expect("failed to init");
 
     while let Some(result) = from_client.next().await {
         match result {
             Ok(msg) if msg.is_text() => {
-                // control gate
-                eprintln!("txt: {}", msg.to_str().unwrap());
+                gate.send(msg.to_str().unwrap().to_string());
             }
             Ok(msg) if msg.is_close() => {
-                // close gate
-                eprintln!("closed!!!!");
+                gate.send("close".to_string());
             }
             Err(e) => {
-                // close gate
-                eprintln!("websocket error(uid={}):", e);
+                gate.send("[e]close".to_string());
                 break;
             }
             _ => eprintln!("unsupported message type"),
