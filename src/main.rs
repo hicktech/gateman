@@ -1,9 +1,11 @@
 use futures_util::{SinkExt, TryFutureExt};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
+use gateman::api;
+use gateman::gate::GatemanRef;
 use warp::filters::ws::{Message, WebSocket};
 use warp::Filter;
 
@@ -20,11 +22,8 @@ use warp::Filter;
 ///
 #[tokio::main]
 async fn main() {
-    let (tx, rx) = mpsc::unbounded_channel();
-    let gate = warp::any().map(move || tx.clone());
-
-    // placeholder for the gate actor
-    mock_gateman(rx);
+    let gm = GatemanRef::new();
+    let gate = warp::any().map(move || gm.clone());
 
     let routes = warp::path("gate")
         .and(warp::ws())
@@ -36,7 +35,7 @@ async fn main() {
 }
 
 // handles the routing of messages to and from the websocket connection
-async fn router(websocket: WebSocket, gate: UnboundedSender<String>) {
+async fn router(websocket: WebSocket, gm: GatemanRef) {
     use futures_util::StreamExt;
 
     let (mut ws_tx, mut from_client) = websocket.split();
@@ -65,13 +64,16 @@ async fn router(websocket: WebSocket, gate: UnboundedSender<String>) {
     while let Some(result) = from_client.next().await {
         match result {
             Ok(msg) if msg.is_text() => {
-                gate.send(msg.to_str().unwrap().to_string()).unwrap();
+                gm.sender.send(api::Command::Open(1)).await.unwrap();
+                //gate.send(msg.to_str().unwrap().to_string()).unwrap();
             }
             Ok(msg) if msg.is_close() => {
-                gate.send("close".to_string()).unwrap();
+                gm.sender.send(api::Command::Close).await.unwrap();
+                // gate.send("close".to_string()).unwrap();
             }
             Err(_) => {
-                gate.send("[e]close".to_string()).unwrap();
+                gm.sender.send(api::Command::Close).await.unwrap();
+                // gate.send("[e]close".to_string()).unwrap();
                 break;
             }
             _ => eprintln!("unsupported message type"),

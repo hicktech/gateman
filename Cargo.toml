@@ -3,6 +3,10 @@ name = "gateman"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "gateman"
+path = "src/main.rs"
+
 [dev-dependencies]
 clap = { version = "3", features = ["derive"]}
 
