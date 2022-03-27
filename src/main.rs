@@ -1,7 +1,9 @@
-use futures_util::{SinkExt, StreamExt, TryFutureExt};
+use futures_util::{SinkExt, TryFutureExt};
+use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
+
 use warp::filters::ws::{Message, WebSocket};
 use warp::Filter;
 
@@ -21,23 +23,22 @@ async fn main() {
     let (tx, rx) = mpsc::unbounded_channel();
     let gate = warp::any().map(move || tx.clone());
 
-    let mut rx = UnboundedReceiverStream::new(rx);
-    tokio::task::spawn(async move {
-        while let Some(message) = rx.next().await {
-            eprintln!("gate rx: {}", message);
-        }
-    });
+    // placeholder for the gate actor
+    mock_gateman(rx);
 
     let routes = warp::path("gate")
         .and(warp::ws())
         .and(gate)
-        .map(|ws: warp::ws::Ws, tx| ws.on_upgrade(|websocket| connection(websocket, tx)));
+        .map(|ws: warp::ws::Ws, tx| ws.on_upgrade(|websocket| router(websocket, tx)));
 
     eprintln!("websocket ready");
     warp::serve(routes).run(([127, 0, 0, 1], 9000)).await;
 }
 
-async fn connection(websocket: WebSocket, gate: UnboundedSender<String>) {
+// handles the routing of messages to and from the websocket connection
+async fn router(websocket: WebSocket, gate: UnboundedSender<String>) {
+    use futures_util::StreamExt;
+
     let (mut ws_tx, mut from_client) = websocket.split();
     let (to_client, rx) = mpsc::unbounded_channel();
 
@@ -55,25 +56,47 @@ async fn connection(websocket: WebSocket, gate: UnboundedSender<String>) {
         }
     });
 
+    // fire off an initial message to the client
     to_client
         .send(Message::text("hello"))
         .expect("failed to init");
 
+    // receive messages from the ws client and hand them off to the gateman
     while let Some(result) = from_client.next().await {
         match result {
             Ok(msg) if msg.is_text() => {
-                gate.send(msg.to_str().unwrap().to_string());
+                gate.send(msg.to_str().unwrap().to_string()).unwrap();
             }
             Ok(msg) if msg.is_close() => {
-                gate.send("close".to_string());
+                gate.send("close".to_string()).unwrap();
             }
-            Err(e) => {
-                gate.send("[e]close".to_string());
+            Err(_) => {
+                gate.send("[e]close".to_string()).unwrap();
                 break;
             }
             _ => eprintln!("unsupported message type"),
         };
     }
-
     eprintln!("shutting down")
+}
+
+// represents the gate actor which receives messages and shuts the gate after an inactivity timeout
+fn mock_gateman(mbox: UnboundedReceiver<String>) {
+    use tokio_stream::StreamExt;
+    let mut rx = UnboundedReceiverStream::new(mbox);
+
+    tokio::task::spawn(async move {
+        while let Ok(message) = tokio::time::timeout(Duration::from_secs(5), rx.next()).await {
+            match message {
+                Some(message) => {
+                    eprintln!("gate rx-comm: {}", message.trim());
+                }
+                None => {
+                    eprintln!("gate rx-term: closing");
+                    return;
+                }
+            }
+        }
+        eprintln!("gate timeout: closing");
+    });
 }
