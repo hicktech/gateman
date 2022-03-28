@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use gateman::api;
+use gateman::gate;
 use gateman::gate::GatemanRef;
 use warp::filters::ws::{Message, WebSocket};
 use warp::Filter;
@@ -64,15 +64,15 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
     while let Some(result) = from_client.next().await {
         match result {
             Ok(msg) if msg.is_text() => {
-                gm.sender.send(api::Command::Open(1)).await.unwrap();
+                gm.sender.send(gate::Command::Open(1)).await.unwrap();
                 //gate.send(msg.to_str().unwrap().to_string()).unwrap();
             }
             Ok(msg) if msg.is_close() => {
-                gm.sender.send(api::Command::Close).await.unwrap();
+                gm.sender.send(gate::Command::Close).await.unwrap();
                 // gate.send("close".to_string()).unwrap();
             }
             Err(_) => {
-                gm.sender.send(api::Command::Close).await.unwrap();
+                gm.sender.send(gate::Command::Close).await.unwrap();
                 // gate.send("[e]close".to_string()).unwrap();
                 break;
             }
@@ -83,7 +83,7 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
 }
 
 // represents the gate actor which receives messages and shuts the gate after an inactivity timeout
-fn mock_gateman(mbox: UnboundedReceiver<String>) {
+fn _mock_gateman(mbox: UnboundedReceiver<String>) {
     use tokio_stream::StreamExt;
     let mut rx = UnboundedReceiverStream::new(mbox);
 
