@@ -7,11 +7,13 @@ use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
 use rppal::pwm::{Channel, Polarity, Pwm};
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use tokio::select;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::{Receiver, Sender};
 use Direction::*;
 
 /// Example: take steps
@@ -46,7 +48,6 @@ struct Drive {
     data: Arc<InputPin>,
     pwm: Arc<Pwm>,
     pos: Arc<AtomicIsize>,
-    kill: Option<Receiver<()>>,
 }
 
 impl Drop for Drive {
@@ -75,29 +76,23 @@ impl Drive {
             data,
             pwm,
             pos: Arc::new(AtomicIsize::new(at)),
-            kill: None,
         })
     }
 
-    // todo;; convert to with_
-    fn set_killer(&mut self, rx: Receiver<()>) {
-        self.kill = Some(rx);
-    }
+    // fn set_killer(&mut self, tx: Sender<()>, rx: Receiver<()>) {
+    //     self.kill = Some((tx, rx));
+    // }
 
     fn position(&self) -> isize {
         self.pos.load(Ordering::Relaxed)
     }
 
-    // todo;; modify how the killer is set to enable this
-    // fn stop(&mut self) {
-    //     match self.kill_tx.take() {
-    //         Some(c) => c.send(()).unwrap(),
-    //         None => println!("not started"),
-    //     };
+    // fn killer(self) -> Sender<()> {
+    //     self.kill.0.clone()
     // }
-
-    // todo;; use an atomic flag to enable this
-    // fn is_running(&self) -> bool {
+    //
+    // fn stop(self) {
+    //     self.killer().send(());
     // }
 
     async fn move_to(&mut self, target_pos: isize) {
@@ -117,33 +112,48 @@ impl Drive {
             // start reading encoder in native thread, provie a kill channel
             let clock = self.clock.clone();
             let data = self.data.clone();
-            let (enc_tx, mut enc_rx) = mpsc::channel();
-            let (enc_kill_tx, mut enc_kill_rx) = mpsc::channel();
+            let (enc_tx, mut enc_rx) = mpsc::channel(1);
+            let (enc_kill_tx, mut enc_kill_rx) = mpsc::channel(1);
+
             let h = std::thread::spawn(move || read_encoder(clock, data, enc_tx, enc_kill_rx));
 
             // pulse steps while reading from the encoder
             self.dir.write(dir.into());
             self.pwm.enable();
 
+            let position = self.pos.clone();
+
             // todo: change to select! to support the kill channel
-            while let Ok(d) = enc_rx.recv() {
-                match d {
-                    Open => current_position += 1,
-                    Close => current_position -= 1,
-                };
-                encoder_steps += 1;
+            tokio::spawn(async move {
+                loop {
+                    select! {
+                        Some(e) = enc_rx.recv() => {
+                            match e {
+                                Open => current_position += 1,
+                                Close => current_position -= 1,
+                            };
+                            encoder_steps += 1;
 
-                self.pos.store(current_position, Ordering::Relaxed);
-                println!("position: {}", current_position);
+                            position.store(current_position, Ordering::Relaxed);
+                            println!("position: {}", current_position);
 
-                if target_is_met(current_position, target_pos, dir) {
-                    println!(
-                        "Executed {} of projected {} steps to move to position {}",
-                        encoder_steps, steps_needed, target_pos
-                    );
-                    enc_kill_tx.send(());
+                            if target_is_met(current_position, target_pos, dir) {
+                                println!(
+                                    "Executed {} of projected {} steps to move to position {}",
+                                    encoder_steps, steps_needed, target_pos
+                                );
+                                enc_kill_tx.send(()).await;
+                            }
+                        }
+                        else => {
+                            println!("exiting movement loop...");
+                            break;
+                        }
+                    }
                 }
-            }
+            })
+            .await;
+
             h.join();
             self.pwm.disable();
         }
@@ -151,12 +161,12 @@ impl Drive {
 }
 
 // todo;; should encoder always read
-// tood;; should encoder maintain its position
+// todo;; should encoder maintain its position
 fn read_encoder(
     clock: Arc<InputPin>,
     data: Arc<InputPin>,
     tx: mpsc::Sender<Direction>,
-    kill: mpsc::Receiver<()>,
+    mut kill: mpsc::Receiver<()>,
 ) {
     let mut state: u16 = 0;
     while kill.try_recv().is_err() {
@@ -165,10 +175,11 @@ fn read_encoder(
 
         state = (&state << 1) | c | 0xe000;
         if state == 0xf000 {
-            tx.send(d.into());
+            tx.blocking_send(d.into());
             state = 0;
         }
     }
+    println!("encoder thread existing...");
 }
 
 fn steps_in_right_direction(current: isize, target: isize) -> (isize, Direction) {
@@ -184,7 +195,7 @@ fn target_is_met(current: isize, target: isize, dir: Direction) -> bool {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum Direction {
     Open,
     Close,
@@ -221,15 +232,10 @@ impl Display for Direction {
 async fn main() -> Result<(), Box<dyn Error>> {
     let opts: Opts = Opts::parse();
 
-    // kill movement channel
-    let (move_kill_tx, mut move_kill_rx) = mpsc::channel();
-
     let mut driver = Drive::new(opts.at, opts.dir_pin, opts.clock_pin, opts.data_pin)?;
-    driver.set_killer(move_kill_rx);
 
     // todo;; this is not wired on the other end yet
-    ctrlc::set_handler(move || {
-        move_kill_tx.send(());
+    ctrlc::set_handler(|| {
         println!("received Ctrl+C!");
     })
     .expect("Error setting Ctrl-C handler");
