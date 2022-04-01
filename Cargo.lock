@@ -267,6 +267,7 @@ dependencies = [
  "ctrlc",
  "futures-util",
  "rppal",
+ "thiserror",
  "tokio",
  "tokio-stream",
  "warp",

@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::time::Duration;
 
 use clap::Parser;
@@ -12,9 +11,10 @@ use gateman::cli::Opts;
 use gateman::drive::Drive;
 use gateman::gate;
 use gateman::gate::GatemanRef;
+use gateman::Error;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Error> {
     let opts: Opts = Opts::parse();
 
     let driver = Drive::new(opts.at, opts.dir_pin, opts.clock_pin, opts.data_pin)?;
