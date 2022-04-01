@@ -26,8 +26,12 @@ async fn main() -> Result<(), Error> {
         .and(gate)
         .map(|ws: warp::ws::Ws, tx| ws.on_upgrade(|websocket| router(websocket, tx)));
 
-    eprintln!("websocket ready");
-    warp::serve(routes).run(([127, 0, 0, 1], 9000)).await;
+    eprintln!(
+        "websocket starting on {:?} port {}",
+        opts.interface, opts.port
+    );
+    let address: [u8; 4] = opts.interface.into();
+    warp::serve(routes).run((address, opts.port)).await;
 
     Ok(())
 }

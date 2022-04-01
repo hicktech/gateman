@@ -1,8 +1,10 @@
+use std::time::Duration;
+
+use tokio::sync::mpsc;
+
 use crate::drive::Drive;
 use crate::gate::State::*;
 use crate::Result;
-use std::time::Duration;
-use tokio::sync::mpsc;
 
 #[derive(Debug, Clone)]
 pub enum Command {

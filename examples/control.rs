@@ -3,8 +3,12 @@ use clap::Parser;
 use gateman::drive::Drive;
 use gateman::Result;
 
+use git_version::git_version;
+const GIT_VERSION: &str = git_version!();
+
 /// Example: take steps
 #[derive(Parser)]
+#[clap(name = "Gateman", version = GIT_VERSION)]
 struct Opts {
     #[clap(short, long, default_value = "500")]
     frequency: f64,
