@@ -1,28 +1,24 @@
-use futures_util::{SinkExt, TryFutureExt};
+use std::error::Error;
 use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use gateman::gate;
-use gateman::gate::GatemanRef;
+use clap::Parser;
+use futures_util::{SinkExt, TryFutureExt};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::filters::ws::{Message, WebSocket};
 use warp::Filter;
 
-/// # Gateman Webservice
-/// Websocket based service that provides remote gate control.
-///
-/// ## Goal: Bi-directional connection that supports
-/// 1. Ensuring that the client device is connected
-/// 2. Receiving commands from the client device
-/// 3. Sending status updates to the client device
-///
-/// ## Fail-safe modes must be in place to support
-/// 1. Shutting the sytem down in a controlled manner if client is non-responsive or disconnects
-///
+use gateman::cli::Opts;
+use gateman::drive::Drive;
+use gateman::gate;
+use gateman::gate::GatemanRef;
+
 #[tokio::main]
-async fn main() {
-    let gm = GatemanRef::new();
+async fn main() -> Result<(), Box<dyn Error>> {
+    let opts: Opts = Opts::parse();
+
+    let driver = Drive::new(opts.at, opts.dir_pin, opts.clock_pin, opts.data_pin)?;
+    let gm = GatemanRef::new(driver);
     let gate = warp::any().map(move || gm.clone());
 
     let routes = warp::path("gate")
@@ -32,6 +28,8 @@ async fn main() {
 
     eprintln!("websocket ready");
     warp::serve(routes).run(([127, 0, 0, 1], 9000)).await;
+
+    Ok(())
 }
 
 // handles the routing of messages to and from the websocket connection
@@ -61,44 +59,43 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
         .expect("failed to init");
 
     // receive messages from the ws client and hand them off to the gateman
-    while let Some(result) = from_client.next().await {
+    while let Ok(result) = tokio::time::timeout(Duration::from_secs(5), from_client.next()).await {
         match result {
-            Ok(msg) if msg.is_text() => {
-                gm.sender.send(gate::Command::Open(1)).await.unwrap();
-                //gate.send(msg.to_str().unwrap().to_string()).unwrap();
+            Some(Ok(msg)) if msg.is_text() => {
+                let n = msg.to_str().unwrap().trim().parse().unwrap();
+                gm.sender.send(gate::Command::Open(n)).await.unwrap();
             }
-            Ok(msg) if msg.is_close() => {
+            Some(Ok(msg)) if msg.is_close() => {
                 gm.sender.send(gate::Command::Close).await.unwrap();
-                // gate.send("close".to_string()).unwrap();
             }
-            Err(_) => {
+            _ => {
+                println!("--- unsupported message type or error ---");
                 gm.sender.send(gate::Command::Close).await.unwrap();
                 // gate.send("[e]close".to_string()).unwrap();
                 break;
             }
-            _ => eprintln!("unsupported message type"),
         };
     }
     eprintln!("shutting down")
 }
-
-// represents the gate actor which receives messages and shuts the gate after an inactivity timeout
-fn _mock_gateman(mbox: UnboundedReceiver<String>) {
-    use tokio_stream::StreamExt;
-    let mut rx = UnboundedReceiverStream::new(mbox);
-
-    tokio::task::spawn(async move {
-        while let Ok(message) = tokio::time::timeout(Duration::from_secs(5), rx.next()).await {
-            match message {
-                Some(message) => {
-                    eprintln!("gate rx-comm: {}", message.trim());
-                }
-                None => {
-                    eprintln!("gate rx-term: closing");
-                    return;
-                }
-            }
-        }
-        eprintln!("gate timeout: closing");
-    });
-}
+//
+// // represents the gate actor which receives messages and shuts the gate after an inactivity timeout
+// fn _mock_gateman(mbox: UnboundedReceiver<String>) {
+//     use tokio_stream::StreamExt;
+//     let mut rx = UnboundedReceiverStream::new(mbox);
+//
+//     tokio::task::spawn(async move {
+//         while let Ok(message) = tokio::time::timeout(Duration::from_secs(5), rx.next()).await {
+//             match message {
+//                 Some(message) => {
+//                     eprintln!("gate rx-comm: {}", message.trim());
+//                 }
+//                 None => {
+//                     eprintln!("gate rx-term: closing");
+//                     return;
+//                 }
+//             }
+//         }
+//         eprintln!("gate timeout: closing");
+//     });
+// }

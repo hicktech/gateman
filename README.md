@@ -1,7 +1,16 @@
 Gateman
 ===
 
-Flow control
+Flow control with
+
+### Bi-directional connection that supports
+1. Ensuring that the client device is connected
+2. Receiving commands from the client device
+3. Sending status updates to the client device
+
+### Fail-safes that must be in place
+1. Shutting the sytem down in a controlled manner if client is non-responsive or disconnects
+
 
 ## Setup
 
@@ -33,7 +42,7 @@ cargo build --target=armv7-unknown-linux-gnueabihf
 
 ### Pi PWM config
 
-Boot config needs an entry to configure GPIO (BCM) 12 as PWM0
+Boot config (`/boot/config.txt`) needs an entry to configure GPIO (BCM) 12 as PWM0
 
 `dtoverlay=pwm,pin=12,func=4`
 

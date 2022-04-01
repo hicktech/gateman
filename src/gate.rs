@@ -1,17 +1,16 @@
+use crate::drive::Drive;
 use crate::gate::State::*;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    Stop,
     Close,
     Open(u8),
 }
 
 #[derive(Debug, Clone)]
 enum State {
-    Closed,
     Stopped(u8),
     Moving(u8),
 }
@@ -22,44 +21,42 @@ pub struct GatemanRef {
 }
 
 impl GatemanRef {
-    pub fn new() -> Self {
+    pub fn new(driver: Drive) -> Self {
         let (tx, rx) = mpsc::channel(10);
-        let actor = Gateman::new(rx);
+        let actor = Gateman::new(driver, rx);
         tokio::spawn(execute(actor));
         GatemanRef { sender: tx }
     }
 }
 
 struct Gateman {
+    driver: Drive,
     cmdbus: mpsc::Receiver<Command>,
     state: State,
 }
 
 impl Gateman {
-    pub fn new(rx: mpsc::Receiver<Command>) -> Self {
+    pub fn new(driver: Drive, rx: mpsc::Receiver<Command>) -> Self {
         Gateman {
+            driver,
             cmdbus: rx,
-            state: Closed,
+            state: Stopped(0),
         }
     }
 
-    pub fn handle(&mut self, cmd: Command) {
+    pub async fn handle(&mut self, cmd: Command) {
         match cmd {
             Command::Close => {
                 eprintln!("{:?} => Closed", self.state);
-                self.state = Closed
+                self.state = Moving(0);
+                self.driver.move_to(0).await;
+                self.state = Stopped(0)
             }
             Command::Open(n) => {
-                // if moving, stop
-                // read current position
-
+                // todo;; if moving, stop?
                 eprintln!("opening to {}", n);
-                self.state = Moving(n)
-            }
-            Command::Stop => {
-                eprintln!("Stopping");
-                // todo;; need to get the current position here
-                self.state = Stopped(0)
+                self.state = Moving(n);
+                self.driver.move_to(n as isize * 100).await;
             }
         }
     }
@@ -76,5 +73,6 @@ async fn execute(mut actor: Gateman) {
                 actor.handle(Command::Close)
             }
         }
+        .await
     }
 }
