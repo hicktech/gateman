@@ -28,9 +28,9 @@ async fn main() -> Result<(), Error> {
 
     eprintln!(
         "websocket starting on {:?} port {}",
-        opts.interface, opts.port
+        opts.address, opts.port
     );
-    let address: [u8; 4] = opts.interface.into();
+    let address: [u8; 4] = opts.address.into();
     warp::serve(routes).run((address, opts.port)).await;
 
     Ok(())
@@ -46,7 +46,7 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
     eprintln!("connected");
 
     let mut rx = UnboundedReceiverStream::new(rx);
-    tokio::task::spawn(async move {
+    let h = tokio::task::spawn(async move {
         while let Some(message) = rx.next().await {
             ws_tx
                 .send(message)
@@ -80,6 +80,7 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
             }
         };
     }
+    drop(h);
     eprintln!("shutting down")
 }
 //

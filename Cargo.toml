@@ -8,14 +8,18 @@ name = "gateman"
 path = "src/main.rs"
 
 [dev-dependencies]
+tokio-tungstenite = "0.17"
+url = "2.0"
+futures-channel = "0.3"
+futures = "0.3"
 
 [dependencies]
 clap = { version = "3.0", features = ["derive"] }
 rppal = { version = "0.13.1", features = ["hal"] }
 tokio = { version = "1", features = ["full"] }
 warp = "0.3"
-tokio-stream = "0.1"
 futures-util = "0.3"
+tokio-stream = "0.1"
 ctrlc = "3.2"
 thiserror = "1"
 git-version = "0.3.5"
