@@ -183,8 +183,8 @@ enum Direction {
 impl From<Direction> for Level {
     fn from(d: Direction) -> Self {
         match d {
-            Open => Low,
-            Close => High,
+            Open => High,
+            Close => Low,
         }
     }
 }
