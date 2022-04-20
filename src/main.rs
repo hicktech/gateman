@@ -59,12 +59,12 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
     });
 
     // fire off an initial message to the client
-    to_client
-        .send(Message::text("hello"))
-        .expect("failed to init");
+    // to_client
+    //     .send(Message::text("hello"))
+    //     .expect("failed to init");
 
     // receive messages from the ws client and hand them off to the gateman
-    while let Ok(result) = tokio::time::timeout(Duration::from_secs(5), from_client.next()).await {
+    while let Ok(result) = tokio::time::timeout(Duration::from_secs(50), from_client.next()).await {
         match result {
             Some(Ok(msg)) if msg.is_text() => {
                 let t = msg.to_str().unwrap().trim();
@@ -72,21 +72,24 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
                     "ping" => {}
                     "close" => {
                         println!("cmd: closing");
-                        to_client.send(Message::text("0")).unwrap();
+                        to_client.send(Message::text("closing:0")).unwrap();
                     }
                     v => {
-                        let n: u8 = v.parse().unwrap();
-                        println!("cmd: open to {}", n);
-                        gm.sender.send(gate::Command::Open(n)).await.unwrap();
-                        to_client.send(Message::text(format!("{}", n))).unwrap();
+                        let to: u8 = v.parse().unwrap();
+                        println!("cmd: open to {}", to);
+                        gm.sender.send(gate::Command::Open(to)).await.unwrap();
+                        to_client
+                            .send(Message::text(format!("moving:{}", to)))
+                            .unwrap();
                     }
                 }
             }
             Some(Ok(msg)) if msg.is_close() => {
                 gm.sender.send(gate::Command::Close).await.unwrap();
+                break;
             }
-            _ => {
-                println!("--- unsupported message type or error ---");
+            err => {
+                println!("--- unsupported message {:?} ---", err);
                 gm.sender.send(gate::Command::Close).await.unwrap();
                 // gate.send("[e]close".to_string()).unwrap();
                 break;
@@ -96,24 +99,3 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
     drop(h);
     eprintln!("shutting down")
 }
-//
-// // represents the gate actor which receives messages and shuts the gate after an inactivity timeout
-// fn _mock_gateman(mbox: UnboundedReceiver<String>) {
-//     use tokio_stream::StreamExt;
-//     let mut rx = UnboundedReceiverStream::new(mbox);
-//
-//     tokio::task::spawn(async move {
-//         while let Ok(message) = tokio::time::timeout(Duration::from_secs(5), rx.next()).await {
-//             match message {
-//                 Some(message) => {
-//                     eprintln!("gate rx-comm: {}", message.trim());
-//                 }
-//                 None => {
-//                     eprintln!("gate rx-term: closing");
-//                     return;
-//                 }
-//             }
-//         }
-//         eprintln!("gate timeout: closing");
-//     });
-// }
