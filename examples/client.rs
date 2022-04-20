@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     interval.reset();
                 }
                 _ = interval.tick() => {
-                    ws_tx.send(Message::Text("keep-alive".to_string())).await.expect("tx fail");
+                    ws_tx.send(Message::Text("ping".to_string())).await.expect("tx fail");
                     println!("tick");
                 }
                 else => {
@@ -79,6 +79,9 @@ async fn read_stdin(tx: mpsc::UnboundedSender<Message>) {
         };
         buf.truncate(n);
         let s = String::from_utf8(buf).expect("failed to read stdin");
-        tx.unbounded_send(Message::text(s)).unwrap();
+        let s = s.trim();
+        if !s.is_empty() {
+            tx.unbounded_send(Message::text(s)).unwrap();
+        }
     }
 }

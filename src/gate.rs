@@ -59,11 +59,10 @@ impl Gateman {
                 // todo;; if moving, stop?
                 eprintln!("opening to {}", n);
                 self.state = Moving(n);
-                self.driver.move_to(n as isize * 100).await?;
+                self.driver.move_to(n as isize * 10).await?;
                 eprintln!("completed move to {}", n);
             }
         }
-
         Ok(())
     }
 }

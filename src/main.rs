@@ -46,6 +46,7 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
     eprintln!("connected");
 
     let mut rx = UnboundedReceiverStream::new(rx);
+    // todo;; there is a pipe function available
     let h = tokio::task::spawn(async move {
         while let Some(message) = rx.next().await {
             ws_tx
@@ -66,8 +67,20 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
     while let Ok(result) = tokio::time::timeout(Duration::from_secs(5), from_client.next()).await {
         match result {
             Some(Ok(msg)) if msg.is_text() => {
-                let n = msg.to_str().unwrap().trim().parse().unwrap();
-                gm.sender.send(gate::Command::Open(n)).await.unwrap();
+                let t = msg.to_str().unwrap().trim();
+                match t {
+                    "ping" => {}
+                    "close" => {
+                        println!("cmd: closing");
+                        to_client.send(Message::text("0")).unwrap();
+                    }
+                    v => {
+                        let n: u8 = v.parse().unwrap();
+                        println!("cmd: open to {}", n);
+                        gm.sender.send(gate::Command::Open(n)).await.unwrap();
+                        to_client.send(Message::text(format!("{}", n))).unwrap();
+                    }
+                }
             }
             Some(Ok(msg)) if msg.is_close() => {
                 gm.sender.send(gate::Command::Close).await.unwrap();
