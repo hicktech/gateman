@@ -68,4 +68,4 @@ jobs:
           draft: true
           prerelease: ${{ startsWith(github.ref, 'refs/tags/v0') || contains(github.ref, 'rc') }}
           files: |
-            target/${{ matrix.triple.target }}/release/gateman-x86_64-unknown-linux-*
+            target/${{ matrix.triple.target }}/release/gateman-*-linux-*
