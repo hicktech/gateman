@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           strip target/${{ matrix.triple.target }}/release/gateman || true
-          mv target/${{ matrix.triple.target }}/release/gateman target/${{ matrix.triple.target }}/release/gateman-${{ matrix.triple.target }}
+          mv target/${{ matrix.triple.target }}/release/gateman /tmp/gateman-${{ matrix.triple.target }}
 
       - uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/v')
@@ -68,4 +68,4 @@ jobs:
           draft: true
           prerelease: ${{ startsWith(github.ref, 'refs/tags/v0') || contains(github.ref, 'rc') }}
           files: |
-            target/${{ matrix.triple.target }}/release/gateman-*-linux-*
+            /tmp/gateman-*
