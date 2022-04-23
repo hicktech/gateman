@@ -1,0 +1,72 @@
+on:
+  push:
+    tags:
+      - 'v*'
+
+name: release
+
+jobs:
+  release:
+    needs: build
+    name: build-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ matrix.triple.os }}
+    env:
+      RUST_BACKTRACE: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [ stable ]
+        triple:
+          - {
+            os: "ubuntu-latest",
+            target: "x86_64-unknown-linux-gnu",
+            artifact_prefix: "linux",
+          }
+          - {
+            os: "ubuntu-latest",
+            target: "x86_64-unknown-linux-musl",
+            artifact_prefix: "linux-musl",
+          }
+    steps:
+      - name: install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.triple.target }}
+          override: true
+
+      - name: install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -qq pkg-config libssl-dev musl-tools
+
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target=${{ matrix.triple.target }}
+          toolchain: ${{ matrix.rust }}
+
+      - name: package
+        shell: bash
+        run: |
+          strip target/${{ matrix.triple.target }}/release/unstuck
+          mv target/${{ matrix.triple.target }}/release/unstuck target/${{ matrix.triple.target }}/release/unstuck-${{ matrix.triple.target }}
+
+      - uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/v')
+        name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          prerelease: ${{ startsWith(github.ref, 'refs/tags/v0') || contains(github.ref, 'rc') }}
+          draft: true
+          files: |
+            target/${{ matrix.triple.target }}/release/unstuck-x86_64-unknown-linux-*
