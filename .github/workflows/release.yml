@@ -56,7 +56,7 @@ jobs:
       - name: package
         shell: bash
         run: |
-          strip target/${{ matrix.triple.target }}/release/gateman
+          strip target/${{ matrix.triple.target }}/release/gateman || true
           mv target/${{ matrix.triple.target }}/release/gateman target/${{ matrix.triple.target }}/release/gateman-${{ matrix.triple.target }}
 
       - uses: softprops/action-gh-release@v1
