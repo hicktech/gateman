@@ -35,17 +35,16 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
+      - name: dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -qq pkg-config libssl-dev musl-tools gcc-arm-linux-gnueabihf
+
       - name: toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
           target: ${{ matrix.triple.target }}
-          override: true
-
-      - name: dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y -qq pkg-config libssl-dev musl-tools
 
       - name: build
         uses: actions-rs/cargo@v1
