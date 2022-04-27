@@ -14,6 +14,7 @@ use crate::Error::{DriverThreadError, EncoderThreadError, EncoderTxError};
 use crate::Result;
 
 pub struct Drive {
+    en: OutputPin,
     dir: OutputPin,
     clock: Arc<InputPin>,
     data: Arc<InputPin>,
@@ -29,7 +30,8 @@ impl Drop for Drive {
 }
 
 impl Drive {
-    pub fn new(at: isize, dir: u8, clock: u8, data: u8) -> Result<Self> {
+    pub fn new(at: isize, en: u8, dir: u8, clock: u8, data: u8) -> Result<Self> {
+        let en = Gpio::new()?.get(en)?.into_output_low();
         let dir = Gpio::new()?.get(dir)?.into_output_low();
         let clock = Arc::new(Gpio::new()?.get(clock)?.into_input_pullup());
         let data = Arc::new(Gpio::new()?.get(data)?.into_input_pullup());
@@ -42,6 +44,7 @@ impl Drive {
         )?);
 
         Ok(Self {
+            en,
             dir,
             clock,
             data,
@@ -65,6 +68,14 @@ impl Drive {
     // fn stop(self) {
     //     self.killer().send(());
     // }s
+
+    pub fn enable(&mut self) {
+        self.en.set_low()
+    }
+
+    pub fn disable(&mut self) {
+        self.en.set_high()
+    }
 
     pub async fn move_to(&mut self, target_pos: isize) -> Result<()> {
         let (steps_needed, dir) = steps_in_right_direction(self.position(), target_pos);

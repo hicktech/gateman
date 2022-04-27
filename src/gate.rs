@@ -52,14 +52,18 @@ impl Gateman {
             Command::Close => {
                 eprintln!("{:?} => Closed", self.state);
                 self.state = Moving(0);
+                self.driver.enable();
                 self.driver.move_to(0).await?;
+                self.driver.disable();
                 self.state = Stopped(0)
             }
             Command::Open(n) => {
                 // todo;; if moving, stop?
                 eprintln!("opening to {}", n);
                 self.state = Moving(n);
+                self.driver.enable();
                 self.driver.move_to(n as isize * 50).await?;
+                self.driver.disable();
                 eprintln!("completed move to {}", n);
             }
         }

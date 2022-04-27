@@ -17,7 +17,13 @@ use gateman::Error;
 async fn main() -> Result<(), Error> {
     let opts: Opts = Opts::parse();
 
-    let driver = Drive::new(opts.at, opts.dir_pin, opts.clock_pin, opts.data_pin)?;
+    let driver = Drive::new(
+        opts.at,
+        opts.en_pin,
+        opts.dir_pin,
+        opts.clock_pin,
+        opts.data_pin,
+    )?;
     let gm = GatemanRef::new(driver);
     let gate = warp::any().map(move || gm.clone());
 

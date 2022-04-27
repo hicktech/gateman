@@ -24,6 +24,9 @@ pub struct Opts {
     #[clap(long, default_value = "24")]
     pub data_pin: u8,
 
+    #[clap(long, default_value = "5")]
+    pub en_pin: u8,
+
     #[clap(long, default_value = "6")]
     pub dir_pin: u8,
 
