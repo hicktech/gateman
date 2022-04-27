@@ -203,8 +203,8 @@ impl From<Direction> for Level {
 impl From<Level> for Direction {
     fn from(l: Level) -> Self {
         match l {
-            Low => Open,
-            High => Close,
+            High => Open,
+            Low => Close,
         }
     }
 }
