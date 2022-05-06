@@ -64,7 +64,8 @@ impl Gateman {
                 self.state = Moving(n);
                 self.driver.enable();
                 // todo;; error here does not disable stepper
-                self.driver.move_to(n as isize * 50).await?;
+                // todo;; externalize this multiplier
+                self.driver.move_to(n as isize * 35).await?;
                 self.driver.disable();
                 eprintln!("completed move to {}", n);
             }
