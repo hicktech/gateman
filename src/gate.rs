@@ -53,6 +53,7 @@ impl Gateman {
                 eprintln!("{:?} => Closed", self.state);
                 self.state = Moving(0);
                 self.driver.enable();
+                // todo;; error here does not disable stepper
                 self.driver.move_to(0).await?;
                 self.driver.disable();
                 self.state = Stopped(0)
@@ -62,6 +63,7 @@ impl Gateman {
                 eprintln!("opening to {}", n);
                 self.state = Moving(n);
                 self.driver.enable();
+                // todo;; error here does not disable stepper
                 self.driver.move_to(n as isize * 50).await?;
                 self.driver.disable();
                 eprintln!("completed move to {}", n);

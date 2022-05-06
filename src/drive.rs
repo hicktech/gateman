@@ -9,6 +9,7 @@ use tokio::select;
 use tokio::sync::mpsc;
 
 use Direction::*;
+use EncoderSpin::*;
 
 use crate::Error::{DriverThreadError, EncoderThreadError, EncoderTxError};
 use crate::Result;
@@ -99,11 +100,11 @@ impl Drive {
 
             let h = std::thread::spawn(move || read_encoder(clock, data, enc_tx, enc_kill_rx));
 
-            // pulse steps while reading from the encoder
+            // set the inferred direction
             self.dir.write(dir.into());
-            let position = self.pos.clone();
 
-            // begin pwm
+            // pulse steps while reading from the encoder
+            let position = self.pos.clone();
             self.pwm.enable()?;
 
             tokio::spawn(async move {
@@ -111,8 +112,8 @@ impl Drive {
                     select! {
                         Some(e) = enc_rx.recv() => {
                             match e {
-                                Open => current_position += 1,
-                                Close => current_position -= 1,
+                                Ccw => current_position += 1,
+                                Cw => current_position -= 1,
                             };
                             encoder_steps += 1;
 
@@ -153,7 +154,7 @@ impl Drive {
 fn read_encoder(
     clock: Arc<InputPin>,
     data: Arc<InputPin>,
-    tx: mpsc::Sender<Direction>,
+    tx: mpsc::Sender<EncoderSpin>,
     mut kill: mpsc::Receiver<()>,
 ) -> Result<()> {
     let mut state: u16 = 0;
@@ -191,11 +192,17 @@ enum Direction {
     Close,
 }
 
+#[derive(Copy, Clone, Debug)]
+enum EncoderSpin {
+    Cw,
+    Ccw,
+}
+
 impl From<Direction> for Level {
     fn from(d: Direction) -> Self {
         match d {
-            Open => High,
-            Close => Low,
+            Open => Low,
+            Close => High,
         }
     }
 }
@@ -203,8 +210,17 @@ impl From<Direction> for Level {
 impl From<Level> for Direction {
     fn from(l: Level) -> Self {
         match l {
-            High => Open,
-            Low => Close,
+            Low => Open,
+            High => Close,
+        }
+    }
+}
+
+impl From<Level> for EncoderSpin {
+    fn from(l: Level) -> Self {
+        match l {
+            Low => Cw,
+            High => Ccw,
         }
     }
 }
