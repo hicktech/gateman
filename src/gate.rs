@@ -10,6 +10,7 @@ use crate::Result;
 pub enum Command {
     Close,
     Open(u8),
+    Nop,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +70,7 @@ impl Gateman {
                 self.driver.disable();
                 eprintln!("completed move to {}", n);
             }
+            _ => {}
         }
         Ok(())
     }

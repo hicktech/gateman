@@ -75,7 +75,9 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
             Some(Ok(msg)) if msg.is_text() => {
                 let t = msg.to_str().unwrap().trim();
                 match t {
-                    "ping" => {}
+                    "ping" => {
+                        gm.sender.send(gate::Command::Nop).await.unwrap();
+                    }
                     "close" => {
                         println!("cmd: closing");
                         to_client.send(Message::text("closing:0")).unwrap();
