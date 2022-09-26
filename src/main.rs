@@ -10,6 +10,7 @@ use warp::Filter;
 use gateman::cli::Opts;
 use gateman::drive::Drive;
 use gateman::gate;
+use gateman::gate::Command::Connect;
 use gateman::gate::GatemanRef;
 use gateman::Error;
 
@@ -49,6 +50,9 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
     let (mut ws_tx, mut from_client) = websocket.split();
     let (to_client, rx) = mpsc::unbounded_channel();
 
+    // we overwrite the stats channel on new connection
+    gm.sender.send(Connect(to_client.clone())).await.unwrap();
+
     eprintln!("connected");
 
     let mut rx = UnboundedReceiverStream::new(rx);
@@ -56,7 +60,7 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
     let h = tokio::task::spawn(async move {
         while let Some(message) = rx.next().await {
             ws_tx
-                .send(message)
+                .send(Message::text(message))
                 .unwrap_or_else(|e| {
                     eprintln!("websocket send error: {}", e);
                 })
@@ -80,15 +84,13 @@ async fn router(websocket: WebSocket, gm: GatemanRef) {
                     }
                     "close" => {
                         println!("cmd: closing");
-                        to_client.send(Message::text("closing:0")).unwrap();
+                        to_client.send("closing:0".to_string()).unwrap();
                     }
                     v => {
                         let to: u8 = v.parse().unwrap();
                         println!("cmd: open to {}", to);
                         gm.sender.send(gate::Command::Open(to)).await.unwrap();
-                        to_client
-                            .send(Message::text(format!("moving:{}", to)))
-                            .unwrap();
+                        to_client.send(format!("moving:{}", to)).unwrap();
                     }
                 }
             }

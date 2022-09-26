@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::drive::Drive;
 use crate::gate::State::*;
@@ -10,6 +11,7 @@ use crate::Result;
 pub enum Command {
     Close,
     Open(u8),
+    Connect(UnboundedSender<String>),
     Nop,
 }
 
@@ -36,6 +38,7 @@ impl GatemanRef {
 struct Gateman {
     driver: Drive,
     cmdbus: mpsc::Receiver<Command>,
+    statbus: Option<UnboundedSender<String>>,
     state: State,
 }
 
@@ -44,18 +47,20 @@ impl Gateman {
         Gateman {
             driver,
             cmdbus: rx,
+            statbus: None,
             state: Stopped(0),
         }
     }
 
     pub async fn handle(&mut self, cmd: Command) -> Result<()> {
         match cmd {
+            Command::Nop => {}
             Command::Close => {
                 eprintln!("{:?} => Closed", self.state);
                 self.state = Moving(0);
                 self.driver.enable();
                 // todo;; error here does not disable stepper
-                self.driver.move_to(0).await?;
+                self.driver.move_to(0, self.statbus.clone()).await?;
                 self.driver.disable();
                 self.state = Stopped(0)
             }
@@ -66,11 +71,13 @@ impl Gateman {
                 self.driver.enable();
                 // todo;; error here does not disable stepper
                 // todo;; externalize this multiplier
-                self.driver.move_to(n as isize * 35).await?;
+                self.driver
+                    .move_to(n as isize * 35, self.statbus.clone())
+                    .await?;
                 self.driver.disable();
                 eprintln!("completed move to {}", n);
             }
-            _ => {}
+            Command::Connect(tx) => self.statbus = Some(tx),
         }
         Ok(())
     }

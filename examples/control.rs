@@ -54,8 +54,8 @@ async fn main() -> Result<()> {
     })
     .expect("Error setting Ctrl-C handler");
 
-    driver.move_to(opts.pos).await?;
-    driver.move_to(opts.pos + 10).await?;
+    driver.move_to(opts.pos, None).await?;
+    driver.move_to(opts.pos + 10, None).await?;
 
     Ok(())
 }

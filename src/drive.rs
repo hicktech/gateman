@@ -7,6 +7,7 @@ use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
 use rppal::pwm::{Channel, Polarity, Pwm};
 use tokio::select;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::UnboundedSender;
 
 use Direction::*;
 use EncoderSpin::*;
@@ -78,7 +79,11 @@ impl Drive {
         self.en.set_high()
     }
 
-    pub async fn move_to(&mut self, target_pos: isize) -> Result<()> {
+    pub async fn move_to(
+        &mut self,
+        target_pos: isize,
+        statbus: Option<UnboundedSender<String>>,
+    ) -> Result<()> {
         let (steps_needed, dir) = steps_in_right_direction(self.position(), target_pos);
         println!("steps needed: {}", steps_needed);
 
@@ -107,6 +112,11 @@ impl Drive {
             let position = self.pos.clone();
             self.pwm.enable()?;
 
+            if let Some(tx) = statbus.as_ref() {
+                tx.send("begin".to_string()).unwrap();
+            }
+
+            let statbuscopy = statbus.clone();
             tokio::spawn(async move {
                 loop {
                     select! {
@@ -119,6 +129,13 @@ impl Drive {
 
                             position.store(current_position, Ordering::Relaxed);
                             println!("position: {}", current_position);
+
+                            if let Some(tx) = statbuscopy.as_ref() {
+                                match tx.send(current_position.to_string()) {
+                                    Ok(_) => {},
+                                    Err(_) => eprintln!("failed to stat current position")
+                                }
+                            }
 
                             if target_is_met(current_position, target_pos, dir) {
                                 println!(
@@ -140,6 +157,10 @@ impl Drive {
 
             // stop pwm
             self.pwm.disable()?;
+
+            if let Some(tx) = statbus.as_ref() {
+                tx.send("done".to_string()).unwrap();
+            }
 
             h.join()
                 .map_err(|_| EncoderThreadError("Join failed".to_string()))??;
