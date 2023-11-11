@@ -12,6 +12,7 @@ use gateman::drive::Drive;
 use gateman::gate;
 use gateman::gate::Command::Connect;
 use gateman::gate::GatemanRef;
+use gateman::limit::LimitSwitch;
 use gateman::Error;
 
 #[tokio::main]
@@ -25,7 +26,8 @@ async fn main() -> Result<(), Error> {
         opts.clock_pin,
         opts.data_pin,
     )?;
-    let gm = GatemanRef::new(driver);
+    let limit_switch = LimitSwitch::new(opts.zero_pin, opts.nonzero_pin)?;
+    let gm = GatemanRef::new(driver, limit_switch);
     let gate = warp::any().map(move || gm.clone());
 
     let routes = warp::path("gate")

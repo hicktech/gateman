@@ -12,6 +12,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use Direction::*;
 use EncoderSpin::*;
 
+use crate::limit::LimitSwitch;
 use crate::Error::{DriverThreadError, EncoderThreadError, EncoderTxError};
 use crate::Result;
 
@@ -79,6 +80,65 @@ impl Drive {
         self.en.set_high()
     }
 
+    pub async fn zero(&mut self, limit_switch: &LimitSwitch) -> Result<()> {
+        let mut encoder_steps: usize = 0;
+
+        println!("thread: zeroing");
+
+        if limit_switch.is_zero()? {
+            return Ok(());
+        }
+
+        // start reading encoder in native thread, provide a kill channel
+        let clock = self.clock.clone();
+        let data = self.data.clone();
+        let (enc_tx, mut enc_rx) = mpsc::channel(1);
+        let (enc_kill_tx, enc_kill_rx) = mpsc::channel(1);
+
+        let h = std::thread::spawn(move || read_encoder(clock, data, enc_tx, enc_kill_rx));
+
+        // set the direction
+        self.dir.write(Close.into());
+
+        // pulse steps while reading from the encoder
+        let position = self.pos.clone();
+        self.pwm.enable()?;
+
+        tokio::spawn({
+            let limit_switch = limit_switch.clone();
+            async move {
+                loop {
+                    // todo;; timeout to disable stepper if encoder sees no movement (configurable)
+                    select! {
+                        Some(e) = enc_rx.recv() => {
+                            encoder_steps += 1;
+
+                            if limit_switch.is_zero().expect("Failed to check zero status") {
+                                enc_kill_tx.send(()).await.expect("Failed to send encoder kill");
+                            }
+                        }
+                        else => {
+                            println!("exiting movement loop...");
+                            break;
+                        }
+                    }
+                }
+            }
+        })
+        .await
+        .map_err(|_| DriverThreadError("Join failed".to_string()))?;
+
+        // stop pwm
+        self.pwm.disable()?;
+
+        h.join()
+            .map_err(|_| EncoderThreadError("Join failed".to_string()))??;
+
+        println!("Completed zero with {encoder_steps} steps");
+
+        Ok(())
+    }
+
     pub async fn move_to(
         &mut self,
         target_pos: isize,
@@ -97,7 +157,7 @@ impl Drive {
                 starting_position, target_pos, dir
             );
 
-            // start reading encoder in native thread, provie a kill channel
+            // start reading encoder in native thread, provide a kill channel
             let clock = self.clock.clone();
             let data = self.data.clone();
             let (enc_tx, mut enc_rx) = mpsc::channel(1);
@@ -119,6 +179,7 @@ impl Drive {
             let statbuscopy = statbus.clone();
             tokio::spawn(async move {
                 loop {
+                    // todo;; timeout to disable stepper if encoder sees no movement (configurable)
                     select! {
                         Some(e) = enc_rx.recv() => {
                             match e {

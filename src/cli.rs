@@ -30,6 +30,15 @@ pub struct Opts {
     #[clap(long, default_value = "6")]
     pub dir_pin: u8,
 
+    /// Signals when zero limit is closed
+    #[clap(long, default_value = "17")]
+    pub zero_pin: u8,
+
+    /// Signals when zero limit is open
+    #[clap(long, default_value = "18")]
+    pub nonzero_pin: u8,
+
+    // todo;; remove
     /// Used to zero the encoder
     #[clap(long, default_value = "0")]
     pub at: isize,

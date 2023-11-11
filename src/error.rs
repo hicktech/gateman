@@ -21,4 +21,7 @@ pub enum Error {
 
     #[error("Driver thread error: {0}")]
     DriverThreadError(String),
+
+    #[error("Zeroing limit switch fault")]
+    ZeroLimitFault,
 }
